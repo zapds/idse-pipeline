@@ -1,0 +1,580 @@
+<!doctype html><meta charset='utf-8'><title>Do Punjab–Haryana farm fires help predict Delhi's smog?</title><style>body{font-family:Georgia,serif;max-width:820px;margin:auto;font-size:11pt;line-height:1.45;color:#111}
+h1{font-size:17pt;border-bottom:1px solid #ccc;margin-top:1.4em}h2{font-size:13pt}
+table{border-collapse:collapse;margin:.8em 0;font-size:9.5pt}th,td{border:1px solid #bbb;padding:3px 7px}
+th{background:#f1f0ec}img{max-width:100%;display:block;margin:.6em auto}pre{background:#f6f6f4;padding:8px;font-size:9pt}
+blockquote{border-left:3px solid #eb6834;margin-left:0;padding-left:12px;color:#333}
+.title{text-align:center;font-size:22pt;margin-top:0}.sub{text-align:center;color:#555}
+@page{size:A4;margin:16mm}</style><p class='title'>Do Punjab–Haryana farm fires help predict Delhi's smog?</p><p class='sub'>IDSE Part A data science project · November 2026</p><h1>1. Problem and motivation</h1>
+<p>Delhi's PM2.5 regularly exceeds 250 µg/m³ (&quot;Severe&quot;) in October–December, more than four times India's 24-hour standard
+of 60. Crop-residue burning in Punjab and Haryana is blamed every year, but its contribution is disputed: the same season
+brings cold, calm air, a shallow mixing layer, Diwali fireworks, traffic and heating. Authorities act on <strong>next-day</strong>
+forecasts (the GRAP restrictions are triggered by AQI levels), so the practical question is predictive:</p>
+<blockquote>
+<p><strong>Does adding satellite-detected farm-fire activity in Punjab and Haryana improve next-day prediction of Delhi's PM2.5
+beyond what today's pollution and weather already tell us, and by how much during the burning season?</strong></p>
+</blockquote>
+<p>The test is an <strong>ablation</strong>. The same model is trained with and without fire features, and the two are compared on a held-out year.
+Three measurable goals were fixed in advance, all judged on the 2019 test year:</p>
+<table>
+<thead>
+<tr>
+  <th>ID</th>
+  <th>Goal</th>
+  <th>Success criterion</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+  <td>G1</td>
+  <td>Beat the naive forecast</td>
+  <td>Best model MAE &lt; persistence MAE, overall and in the burning season</td>
+</tr>
+<tr>
+  <td>G2</td>
+  <td>Quantify the value of fire data</td>
+  <td>Burning-season (15 Oct – 30 Nov) MAE ≥ 10% lower with fires; paired-bootstrap 95% CI excluding 0</td>
+</tr>
+<tr>
+  <td>G3</td>
+  <td>Useful for alerts</td>
+  <td>Recall ≥ 0.7 on Severe days (PM2.5 &gt; 250), with precision reported</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Summary of findings.</strong> ML forecasts beat persistence by 7–14% in the burning season, with the margin growing from
+1-day to 3-day forecasts. In the pre-registered single-season test (2019), fire features appeared to cut burning-season
+error by 4.5–7%. A rolling-origin robustness check over three seasons and three horizons shows that this gain does not
+generalise: pooled over 141 burning-season days, every fire effect lies between −3.5% and +2.1%, with all 95% CIs including
+zero. <strong>Once Delhi's own pollution and weather are known, farm-fire counts add no measurable forecasting skill.</strong></p>
+<h1>2. Data and justification</h1>
+<table>
+<thead>
+<tr>
+  <th>Source</th>
+  <th>What</th>
+  <th>Size used</th>
+  <th>Role</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+  <td>CPCB, via Kaggle <code>rohanrao/air-quality-data-in-india</code> (<code>city_day.csv</code>, CC0)</td>
+  <td>Daily city-average pollutants</td>
+  <td>2,009 Delhi days, 1 Jan 2015 – 1 Jul 2020</td>
+  <td>Target and persistence features</td>
+</tr>
+<tr>
+  <td>NASA FIRMS MODIS C6.1, India yearly files</td>
+  <td>One row per detected fire pixel (lat, lon, time, confidence, FRP)</td>
+  <td>482,420 detections; 119,987 in Punjab+Haryana</td>
+  <td>Fire features (the tested group)</td>
+</tr>
+<tr>
+  <td>Open-Meteo archive (ERA5 reanalysis), 28.61 N 77.21 E</td>
+  <td>Daily temperature, humidity, max wind, dominant wind direction, rain; hourly boundary-layer height</td>
+  <td>2,009 days, 48k hours</td>
+  <td>Weather confounders</td>
+</tr>
+</tbody>
+</table>
+<ul>
+<li><strong>Source:</strong> CPCB is the official monitoring agency, FIRMS is the standard satellite fire product, and ERA5 is the standard reanalysis. None of it is scraped.</li>
+<li><strong>Relevance:</strong> the three sources map onto the target, the hypothesised cause and the main confounder.</li>
+<li><strong>Why weather is essential:</strong> without it, any &quot;fire effect&quot; could just be winter weather. The no-fires model must be strong for the comparison to be fair.</li>
+<li><strong>MODIS rather than VIIRS:</strong> MODIS gives one consistent sensor across all years.</li>
+</ul>
+<h1>3. Data cleaning</h1>
+<table>
+<thead>
+<tr>
+  <th>Issue</th>
+  <th>Action</th>
+  <th>Reason</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+  <td>Duplicate dates</td>
+  <td>Checked and asserted: none</td>
+  <td>Lags require one row per day</td>
+</tr>
+<tr>
+  <td>Missing calendar days</td>
+  <td>Reindexed to a full daily calendar (none were missing)</td>
+  <td>A lag must mean &quot;yesterday&quot;, not &quot;previous row&quot;</td>
+</tr>
+<tr>
+  <td>Missing PM2.5 (2 days, 0.1%)</td>
+  <td><strong>Target never imputed</strong>; those rows dropped (2,006 modelling rows remain)</td>
+  <td>Imputing the target would invent ground truth</td>
+</tr>
+<tr>
+  <td>Feature gaps (PM10 3.8%, SO2/O3 ≈5%)</td>
+  <td>Forward-fill, max 3 days, on feature copies; remaining NaN → median imputer inside the Pipeline (HGB handles NaN natively)</td>
+  <td>Uses only past values; interpolation would leak the future</td>
+</tr>
+<tr>
+  <td>Columns &gt; 40% missing</td>
+  <td>Drop rule (none triggered; Xylene 39% is unused)</td>
+  <td>Too sparse to be reliable</td>
+</tr>
+<tr>
+  <td>Impossible values (negative, PM &gt; 1,000)</td>
+  <td>Rule sets them to NaN (0 found)</td>
+  <td>Sensor errors</td>
+</tr>
+<tr>
+  <td>Extreme but real values (up to 685 µg/m³)</td>
+  <td><strong>Kept</strong></td>
+  <td>These smog episodes are exactly what we want to predict</td>
+</tr>
+<tr>
+  <td>Non-vegetation / low-confidence fire pixels</td>
+  <td>Keep <code>type == 0</code> and <code>confidence ≥ 30</code> (439,543 of 482,420)</td>
+  <td>Industrial hotspots and false alarms are not crop fires</td>
+</tr>
+<tr>
+  <td>Region</td>
+  <td>Bounding box 27.6–32.6 N, 73.8–77.6 E (Figure 4)</td>
+  <td>Captures the burning belt; approximate (limitation)</td>
+</tr>
+<tr>
+  <td>Time zone</td>
+  <td>UTC acquisition time → IST date (343 detections change day)</td>
+  <td>Daily features must align with Delhi's calendar</td>
+</tr>
+<tr>
+  <td>Days without detections</td>
+  <td>0, not NaN (582 days)</td>
+  <td>No fire detected is real information</td>
+</tr>
+<tr>
+  <td>Weather gaps</td>
+  <td>Asserted none</td>
+  <td>ERA5 is complete</td>
+</tr>
+</tbody>
+</table>
+<h1>4. Exploratory analysis: key insights</h1>
+<p>Figure numbers refer to <code>reports/figures/</code> and <code>notebooks/01_eda.ipynb</code>, where each plot has a fuller discussion.</p>
+<ul>
+<li><strong>Seasonality (Figs 1, 2):</strong> the monthly median ranges from 43 (Aug) to 210 µg/m³ (Nov–Dec). The burning-window median is 190, against 83 on other days. High levels continue through Dec–Jan, <em>after</em> the fires stop, so weather alone produces severe smog.</li>
+<li><strong>Fires and PM2.5 (Fig 3):</strong> 69% of detections fall in 15 Oct – 30 Nov. A second fire season in April–May (wheat) produces <strong>no</strong> PM2.5 spike, because summer winds and deep mixing disperse the smoke. Fires matter only when the weather lets them.</li>
+<li><strong>Region (Fig 4):</strong> 92% of Oct–Nov detections in the wider window fall inside the box. A small cluster from western UP also falls inside it.</li>
+<li><strong>Lags (Fig 5):</strong> within Oct–Nov, the correlation between log fires and PM2.5 <em>rises</em> with lag, from 0.27 (same day) to 0.48 (4–5 days). Smoke accumulates over days, which justifies 3- and 7-day rolling fire sums.</li>
+<li><strong>Weather confounding (Fig 6):</strong> PM2.5 falls with wind speed (Spearman −0.34), mixing height (−0.44), temperature (−0.53) and rain (−0.54).</li>
+<li><strong>Wind direction (Fig 7):</strong> NW winds (from Punjab) dominate the cool season on <em>all</em> days (about 45%). Severe days are not more often NW, so direction alone is not the mechanism. This motivates a fire × NW-wind interaction instead.</li>
+<li><strong>Correlations (Fig 8):</strong> tomorrow's PM2.5 correlates 0.90 with today's. Fire features correlate 0.44–0.54 with it, but they are also confounded with temperature and season.</li>
+<li><strong>Diwali (Fig 9):</strong> PM2.5 jumps the day after Diwali (2017: 176 → 427; 2018: 175 → 420), inside the burning season. A Diwali flag is included in <em>both</em> model variants so fireworks are not credited to fires.</li>
+</ul>
+<h1>5. Method</h1>
+<h2>5.1 Features (built in <code>src/features.py</code>)</h2>
+<p>Row <em>t</em> holds what is known by the end of day <em>t</em>. The target is PM2.5 on day <em>t+1</em>.</p>
+<table>
+<thead>
+<tr>
+  <th>Group</th>
+  <th>Features</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+  <td>Persistence</td>
+  <td>PM2.5 today, lags 1–3, 3- and 7-day means; PM10, NO2, CO today</td>
+</tr>
+<tr>
+  <td>Weather (day <em>t</em>)</td>
+  <td>wind speed, wind direction (sin/cos), NW-wind flag (270–360°), temperature, humidity, rain, boundary-layer height mean and min</td>
+</tr>
+<tr>
+  <td>Calendar (of day <em>t+1</em>, known in advance)</td>
+  <td>month (sin/cos), weekday, Diwali ± 2 days, burning-season flag</td>
+</tr>
+<tr>
+  <td><strong>Fires (tested)</strong></td>
+  <td>count today, lags 1–3, 3- and 7-day sums, log counts, FRP sum, log 3-day sum × NW wind</td>
+</tr>
+</tbody>
+</table>
+<p>We use observed day-<em>t</em> weather, not day-<em>t+1</em> weather, which would amount to assuming a perfect weather forecast.</p>
+<h2>5.2 Split and leakage control</h2>
+<pre><code> 2015 ── 2016 ── 2017  │  2018  │  2019  │ 2020 H1
+ TRAIN (TimeSeriesSplit 5-fold CV)  │  VAL  │  TEST  │ stress test
+                        └── refit on 2015–2018 ──┘   (scored once)
+</code></pre>
+<p>A random split would leak, because neighbouring days are almost identical. Rows are assigned by the <strong>date predicted</strong>.
+Imputation and scaling are inside sklearn Pipelines, so they are fitted on training folds only.
+<code>tests/test_features.py</code> scrambles every value after a cut-off day and asserts that no feature on or before the cut-off changes.
+It also checks that the target <em>does</em> change, so the test is shown to catch leakage.</p>
+<h2>5.3 Models</h2>
+<table>
+<thead>
+<tr>
+  <th>Model</th>
+  <th>Why</th>
+  <th>Tuning (GridSearchCV, TimeSeriesSplit(5), MAE)</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+  <td>B0 Persistence</td>
+  <td>Honest baseline; PM2.5 is highly autocorrelated</td>
+  <td>none</td>
+</tr>
+<tr>
+  <td>B1 Seasonal mean</td>
+  <td>What the calendar alone explains</td>
+  <td>none</td>
+</tr>
+<tr>
+  <td>M1 Ridge</td>
+  <td>Interpretable; L2 handles collinear lags</td>
+  <td>α ∈ {0.1, 1, 10, 100} → 100</td>
+</tr>
+<tr>
+  <td>M2 Random Forest</td>
+  <td>Non-linear effects and interactions (fire × wind)</td>
+  <td>depth, leaf size, max_features</td>
+</tr>
+<tr>
+  <td>M3 HistGradientBoosting</td>
+  <td>Strong on tabular data, native NaN handling</td>
+  <td>learning rate, depth, iterations</td>
+</tr>
+</tbody>
+</table>
+<p>M1–M3 are fitted on log(1 + PM2.5), because the target is right-skewed and errors grow with the level. Predictions are
+back-transformed, and all metrics are in µg/m³. <strong>MAE</strong> is the main metric: it is in physical units, and it is robust
+to a few extreme days. RMSE (which penalises big misses) and R² are also reported.</p>
+<p><strong>Selection rule (fixed in advance):</strong> choose the model family with the lowest <em>mean</em> validation MAE across its two
+variants, so the choice does not favour either side of the fire comparison. Random Forest scored 20.60, HistGB 20.67
+and Ridge 22.97, so <strong>Random Forest</strong> was selected.</p>
+<h1>6. Results</h1>
+<p><strong>Table 1. 2019 test MAE (µg/m³)</strong>, n = 365 overall and 47 burning-season days</p>
+<table>
+<thead>
+<tr>
+  <th>Model</th>
+  <th>Variant</th>
+  <th style="text-align:right">MAE overall</th>
+  <th style="text-align:right">MAE burning season</th>
+  <th style="text-align:right">R² overall</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+  <td>Persistence</td>
+  <td>–</td>
+  <td style="text-align:right">27.95</td>
+  <td style="text-align:right">54.45</td>
+  <td style="text-align:right">0.71</td>
+</tr>
+<tr>
+  <td>Seasonal mean</td>
+  <td>–</td>
+  <td style="text-align:right">43.61</td>
+  <td style="text-align:right">97.17</td>
+  <td style="text-align:right">0.48</td>
+</tr>
+<tr>
+  <td>Ridge</td>
+  <td>no fires</td>
+  <td style="text-align:right">27.31</td>
+  <td style="text-align:right">56.43</td>
+  <td style="text-align:right">0.72</td>
+</tr>
+<tr>
+  <td>Ridge</td>
+  <td>with fires</td>
+  <td style="text-align:right">27.22</td>
+  <td style="text-align:right">57.80</td>
+  <td style="text-align:right">0.72</td>
+</tr>
+<tr>
+  <td><strong>Random Forest (selected)</strong></td>
+  <td>no fires</td>
+  <td style="text-align:right">25.28</td>
+  <td style="text-align:right">52.97</td>
+  <td style="text-align:right">0.77</td>
+</tr>
+<tr>
+  <td><strong>Random Forest (selected)</strong></td>
+  <td><strong>with fires</strong></td>
+  <td style="text-align:right"><strong>25.30</strong></td>
+  <td style="text-align:right"><strong>50.57</strong></td>
+  <td style="text-align:right">0.78</td>
+</tr>
+<tr>
+  <td>HistGB</td>
+  <td>no fires</td>
+  <td style="text-align:right">24.36</td>
+  <td style="text-align:right">50.99</td>
+  <td style="text-align:right">0.78</td>
+</tr>
+<tr>
+  <td>HistGB</td>
+  <td>with fires</td>
+  <td style="text-align:right">23.43</td>
+  <td style="text-align:right">47.30</td>
+  <td style="text-align:right">0.79</td>
+</tr>
+</tbody>
+</table>
+<p><img src="figures/R1_model_comparison.png" alt="Model comparison" /></p>
+<p><strong>G1 — met.</strong> The selected model beats persistence by 9.5% overall and 7.1% in the burning season. The seasonal mean
+is far worse, so yesterday's air matters much more than the calendar. Ridge does not beat persistence in the burning
+season. HistGB scored best on test, but we keep the model chosen on validation rather than re-selecting after seeing
+the test result.</p>
+<p><strong>Table 2. G2: burning-season gain from fire features</strong> (MAE without − MAE with; positive means fires help)</p>
+<table>
+<thead>
+<tr>
+  <th>Model</th>
+  <th style="text-align:right">Gain (µg/m³)</th>
+  <th style="text-align:right">Gain %</th>
+  <th style="text-align:right">95% CI, paired bootstrap</th>
+  <th style="text-align:right">95% CI, 7-day block bootstrap</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+  <td>Ridge</td>
+  <td style="text-align:right">−1.37</td>
+  <td style="text-align:right">−2.4%</td>
+  <td style="text-align:right">[−4.51, 1.94]</td>
+  <td style="text-align:right">[−3.96, 0.96]</td>
+</tr>
+<tr>
+  <td><strong>Random Forest</strong></td>
+  <td style="text-align:right"><strong>2.40</strong></td>
+  <td style="text-align:right"><strong>4.5%</strong></td>
+  <td style="text-align:right"><strong>[−0.05, 5.05]</strong></td>
+  <td style="text-align:right">[0.55, 5.32]</td>
+</tr>
+<tr>
+  <td>HistGB</td>
+  <td style="text-align:right">3.69</td>
+  <td style="text-align:right">7.2%</td>
+  <td style="text-align:right">[0.64, 6.89]</td>
+  <td style="text-align:right">[−0.30, 8.35]</td>
+</tr>
+</tbody>
+</table>
+<p><img src="figures/R3_bootstrap.png" alt="Bootstrap distribution" /></p>
+<p><strong>G2 — not met.</strong> The selected model gains 4.5%, below the 10% target, and its pre-specified CI just touches 0.
+Both tree models gain 4.5–7.2% on 2019. Each reaches a CI excluding 0 under one of the two bootstraps, never both.
+Ridge gains nothing. On its own this looks like a small positive effect. But the 2018 validation year already
+disagreed (HistGB was <em>worse</em> with fires: 37.6 vs 36.6), and 47 days is a small sample. Section 6.1 tests whether the
+2019 result generalises.</p>
+<p><img src="figures/R2_test_season_forecast.png" alt="2019 season forecasts" /></p>
+<p><strong>Table 3. G3: Severe-day alerts</strong> (34 Severe days in 2019)</p>
+<table>
+<thead>
+<tr>
+  <th>Rule</th>
+  <th style="text-align:right">Recall</th>
+  <th style="text-align:right">Precision</th>
+  <th style="text-align:right">Caught / missed / false alarms</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+  <td>Persistence (today &gt; 250)</td>
+  <td style="text-align:right">0.65</td>
+  <td style="text-align:right">0.63</td>
+  <td style="text-align:right">22 / 12 / 13</td>
+</tr>
+<tr>
+  <td>RF with fires, forecast &gt; 250</td>
+  <td style="text-align:right">0.41</td>
+  <td style="text-align:right">0.74</td>
+  <td style="text-align:right">14 / 20 / 5</td>
+</tr>
+<tr>
+  <td>RF with fires, forecast &gt; 225 (threshold chosen on 2018)</td>
+  <td style="text-align:right"><strong>0.74</strong></td>
+  <td style="text-align:right">0.66</td>
+  <td style="text-align:right">25 / 9 / 13</td>
+</tr>
+<tr>
+  <td>RF with fires, &quot;Very Poor or worse&quot; (&gt; 120)</td>
+  <td style="text-align:right">0.84</td>
+  <td style="text-align:right">0.87</td>
+  <td style="text-align:right">90 / 17 / 13</td>
+</tr>
+</tbody>
+</table>
+<p><strong>G3 — not met as specified, met with a calibrated threshold.</strong> The regression shrinks extremes towards the mean, so a
+forecast of 250 is rarely reached. Choosing the alert threshold on the validation year to give 70% recall gives 225.
+On 2019 that gives recall 0.74 and precision 0.66, better than persistence on both. <em>This calibrated rule was added
+after the first test evaluation; it uses validation data only, but we flag it as a secondary result.</em></p>
+<h2>6.1 Robustness: three test seasons × three horizons</h2>
+<p>The primary test uses one season. To check whether its result generalises, <code>src/robustness.py</code> runs a
+<strong>rolling-origin evaluation</strong>. Each burning season 2017, 2018 and 2019 is the test set in turn, with the model
+re-tuned (TimeSeriesSplit CV) and trained only on earlier years. Pooling gives 141 burning-season test days. The whole
+experiment is repeated for forecasts <strong>1, 2 and 3 days ahead</strong>: features still stop at day <em>t</em>, and only the target
+moves. If fires carried real signal, it should appear across seasons, and more strongly at longer horizons where
+today's PM2.5 is less informative. <em>This analysis was added after the primary result.</em></p>
+<p><strong>Table 4. Pooled burning-season gain from fire features (2017–2019, 141 days)</strong></p>
+<table>
+<thead>
+<tr>
+  <th>Horizon</th>
+  <th>Model</th>
+  <th style="text-align:right">MAE no fires</th>
+  <th style="text-align:right">MAE with fires</th>
+  <th style="text-align:right">Gain</th>
+  <th>95% CI (µg/m³)</th>
+  <th>Gain 2017 / 2018 / 2019</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+  <td>1 day</td>
+  <td>Ridge</td>
+  <td style="text-align:right">49.5</td>
+  <td style="text-align:right">49.1</td>
+  <td style="text-align:right">+0.7%</td>
+  <td>[−1.2, 1.9]</td>
+  <td>+1.1 / +4.4 / −2.4%</td>
+</tr>
+<tr>
+  <td>1 day</td>
+  <td>Random Forest</td>
+  <td style="text-align:right">44.9</td>
+  <td style="text-align:right">45.7</td>
+  <td style="text-align:right">−1.9%</td>
+  <td>[−3.0, 1.2]</td>
+  <td>−12.7 / +3.1 / +4.2%</td>
+</tr>
+<tr>
+  <td>1 day</td>
+  <td>HistGB</td>
+  <td style="text-align:right">45.5</td>
+  <td style="text-align:right">45.8</td>
+  <td style="text-align:right">−0.6%</td>
+  <td>[−2.6, 2.0]</td>
+  <td>−3.8 / −2.8 / +4.1%</td>
+</tr>
+<tr>
+  <td>2 days</td>
+  <td>Ridge</td>
+  <td style="text-align:right">60.3</td>
+  <td style="text-align:right">59.9</td>
+  <td style="text-align:right">+0.7%</td>
+  <td>[−1.6, 2.4]</td>
+  <td>+4.8 / −3.4 / −0.3%</td>
+</tr>
+<tr>
+  <td>2 days</td>
+  <td>Random Forest</td>
+  <td style="text-align:right">59.9</td>
+  <td style="text-align:right">59.7</td>
+  <td style="text-align:right">+0.2%</td>
+  <td>[−2.2, 2.6]</td>
+  <td>−2.3 / −2.5 / +3.9%</td>
+</tr>
+<tr>
+  <td>2 days</td>
+  <td>HistGB</td>
+  <td style="text-align:right">59.8</td>
+  <td style="text-align:right">61.9</td>
+  <td style="text-align:right">−3.5%</td>
+  <td>[−5.3, 0.9]</td>
+  <td>−5.6 / −18.6 / +6.6%</td>
+</tr>
+<tr>
+  <td>3 days</td>
+  <td>Ridge</td>
+  <td style="text-align:right">63.4</td>
+  <td style="text-align:right">62.1</td>
+  <td style="text-align:right">+2.1%</td>
+  <td>[−1.2, 3.6]</td>
+  <td>+4.6 / −5.5 / +4.0%</td>
+</tr>
+<tr>
+  <td>3 days</td>
+  <td>Random Forest</td>
+  <td style="text-align:right">65.1</td>
+  <td style="text-align:right">64.1</td>
+  <td style="text-align:right">+1.6%</td>
+  <td>[−1.8, 3.9]</td>
+  <td>−2.5 / −5.0 / +8.1%</td>
+</tr>
+<tr>
+  <td>3 days</td>
+  <td>HistGB</td>
+  <td style="text-align:right">64.9</td>
+  <td style="text-align:right">64.6</td>
+  <td style="text-align:right">+0.5%</td>
+  <td>[−3.0, 3.3]</td>
+  <td>+0.9 / −8.1 / +5.2%</td>
+</tr>
+</tbody>
+</table>
+<p>Persistence burning-season MAE: 48.3 (1 day), 65.4 (2 days), 75.6 (3 days).</p>
+<p><img src="figures/R8_robustness_fire_gain.png" alt="Robustness of the fire effect" /></p>
+<ul>
+<li><strong>The 2019 gain does not generalise.</strong> In 2019, fires help every tree model at every horizon. In 2017 and 2018 they often hurt, by up to 19%. Single-season results range from −19% to +8%. The pooled estimates sit near zero, and <strong>every 95% CI includes zero</strong> (Table 4, Fig R8). The 2019 estimate is within this season-to-season spread.</li>
+<li><strong>No hidden longer-horizon effect.</strong> At 3 days, gains are +0.5% to +2.1%, all with CIs including zero.</li>
+<li>The 7-day block bootstrap gives the same conclusion (see <code>reports/metrics/robustness_summary.json</code>).</li>
+</ul>
+<p><img src="figures/R9_error_vs_horizon.png" alt="Error vs horizon" /></p>
+<ul>
+<li><strong>The models' value grows with the horizon</strong> (Fig R9). Random Forest beats persistence by 7% at 1 day, 8% at 2 days and 14% at 3 days in the burning season. Weather and seasonal context matter more as yesterday's value becomes less informative. With-fires and without-fires lie on top of each other at every horizon.</li>
+</ul>
+<h1>7. Error analysis and interpretation</h1>
+<p><img src="figures/R4_error_analysis.png" alt="Error analysis" /></p>
+<ul>
+<li><strong>Shrinkage:</strong> bias is +12 µg/m³ on Good days and −70 on Severe days (Fig R4). This is the classic regression-to-the-mean pattern, and it explains the low recall at the fixed 250 threshold.</li>
+<li><strong>Season:</strong> the largest under-prediction is in Dec–Jan, which is winter-inversion smog with no fires that the model cannot fully explain.</li>
+<li><strong>Wind:</strong> MAE is 31.7 on NW-wind days vs 18.5 on other days, because NW days are mostly in the polluted season.</li>
+<li><strong>Worst 10 days:</strong> all fall in Nov–Jan. The worst, 3 Nov 2019 (582 observed vs 263 forecast), came in the 2019 public-health-emergency episode. Fire detections fell to 8 and 26 on 2–3 Nov, then jumped to 1,886 on 4 Nov: smoke and haze probably hid the fires from the satellite exactly when they mattered. Several large <em>over</em>-predictions (4 and 16 Nov, 14 Jan) are sudden clean-ups the day after a peak. No Diwali day is among the worst, so the Diwali flag works.</li>
+<li><strong>Lag:</strong> forecasts follow the observed series with about a one-day lag (Fig R2). The models mainly improve on persistence by not over-shooting after a peak collapses.</li>
+</ul>
+<p><img src="figures/R5_permutation_importance.png" alt="Permutation importance" /></p>
+<p><strong>Permutation importance (Fig R5):</strong> today's PM2.5 dominates (+20 µg/m³ when shuffled), followed by the 3- and 7-day means, season, rain and wind.
+Individual fire features look negligible because the ten of them stand in for each other. Shuffling the <strong>whole fire
+group at once</strong> raises burning-season MAE by 3.2 µg/m³, which agrees with the ablation (2.4).</p>
+<p><img src="figures/R6_partial_dependence.png" alt="Partial dependence" /></p>
+<p><strong>Partial dependence (Fig R6):</strong> the forecast rises with recent fire counts, by about <strong>+17 µg/m³ with NW wind against
++6 with other winds</strong>. The pattern is physically plausible (transport from Punjab), but Section 6.1 shows it does not
+translate into a reliable forecast improvement. It is the model's internal response, not evidence of an effect. Ridge (Fig R7) gives <code>log_fire_roll3_sum</code> the 7th-largest standardised coefficient.</p>
+<p><strong>Stress test (2020 H1, COVID lockdown, no burning season):</strong> the tree models beat persistence (MAE 17.1–17.3 vs 19.7),
+and the with/without-fires variants are identical, as they should be.</p>
+<h1>8. Limitations and bias</h1>
+<ol>
+<li><strong>Predictive, not causal.</strong> &quot;Fire counts add no forecasting skill&quot; does <strong>not</strong> mean fires do not pollute Delhi. Their smoke is already reflected in Delhi's PM2.5 and in the seasonal weather the models use. Measuring how much fires <em>cause</em> needs chemical-transport or source-apportionment modelling.</li>
+<li><strong>Satellite detection.</strong> MODIS overpasses are around 10:30 and 13:30 local time, but burning has shifted to evenings. Smoke and cloud hide fires (3 Nov 2019 is an example), and small fires are missed. Counts are only a proxy.</li>
+<li><strong>Region:</strong> the bounding box is not a state polygon and includes part of western UP.</li>
+<li><strong>Spatial averaging:</strong> city-average PM2.5 hides station differences, and the weather is one grid point.</li>
+<li><strong>Few seasons:</strong> the primary test has 47 burning-season days. The robustness check raises this to 141, but that is still only three seasons, and season-to-season variation is large (Table 4).</li>
+<li><strong>Observed rather than forecast weather:</strong> an operational system would use NWP forecasts for <em>t+1</em>.</li>
+<li><strong>Post-hoc steps:</strong> the calibrated alert threshold and the robustness analysis were added after the first test run. Both are reported alongside the primary results, not instead of them.</li>
+<li><strong>Data age:</strong> the data ends in mid-2020, and burning practices and policy have changed since then.</li>
+</ol>
+<h1>9. Conclusion and next steps</h1>
+<p>The ML models beat persistence (G1), and their advantage grows with the forecast horizon, from 7% at 1 day to 14% at
+3 days in the burning season (Fig R9). On the pre-registered single test season (2019), fire features appeared to help by
+4.5–7% (G2 not met). A rolling-origin check across three seasons and three horizons shows that this does not
+generalise: pooled gains range from −3.5% to +2.1%, and every CI includes zero (Table 4). For Severe-day alerts, a
+validation-calibrated threshold reaches 74% recall at 66% precision (Table 3).</p>
+<p><strong>Answer:</strong> once Delhi's own PM2.5 and weather are known, satellite fire counts from Punjab and Haryana add <strong>no
+measurable skill</strong> to 1–3-day PM2.5 forecasts. This does not mean the fires are harmless. It means their effect is already
+visible in the variables a forecaster has, so counting fires adds nothing new. The project also shows a methodological
+point: a single-season test produced a plausible 5–7% &quot;effect&quot; that disappeared when tested on more seasons.</p>
+<p><strong>Next steps:</strong> more seasons (CPCB 2021–2025) to tighten the CIs; VIIRS 375 m fires (better at small and evening
+fires); HYSPLIT back-trajectories to count only fires whose air actually reaches Delhi; forecast rather than observed
+weather; extreme-aware losses to reduce the shrinkage on Severe days.</p>
+<h1>Appendix: viva preparation</h1>
+<ul>
+<li><strong>Why not split randomly?</strong> Consecutive days are nearly identical, so a random split puts &quot;tomorrow&quot; into training and inflates scores. Time order mimics real forecasting.</li>
+<li><strong>Why MAE?</strong> It is in µg/m³, easy to explain, and not dominated by a handful of 500+ days. RMSE is reported for big misses.</li>
+<li><strong>Why a log target?</strong> PM2.5 is right-skewed and its errors scale with level. The log stabilises variance. Metrics are computed after back-transforming.</li>
+<li><strong>How do you know there is no leakage?</strong> Every feature is past-only by construction, preprocessing is inside Pipelines, and the unit test scrambles the future and proves no past feature changes. The test year was scored once with a selection rule fixed in advance.</li>
+<li><strong>Does this prove fires cause smog?</strong> No. It shows that fire counts add predictive information beyond persistence and weather. Attribution needs physical modelling.</li>
+<li><strong>Why keep the outliers?</strong> They are real smog episodes and the reason for the project. Only physically impossible values would be removed.</li>
+<li><strong>What if the CI includes 0?</strong> It did, and we then tested on more seasons rather than arguing about one. With 141 days and three horizons, every CI includes 0, so we conclude there is no measurable added skill, not that fires are proven irrelevant.</li>
+<li><strong>Isn't the robustness check post-hoc?</strong> Yes, and it is labelled as such. It was run to <em>challenge</em> a positive result, not to rescue a negative one, and it trains each fold only on earlier years. The primary 2019 analysis is still reported in full.</li>
+<li><strong>So do fires matter?</strong> For air quality, very likely. For <em>forecasting</em> given today's PM2.5 and weather, the counts add nothing new. Those are different questions.</li>
+</ul>

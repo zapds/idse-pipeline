@@ -1,0 +1,21 @@
+{
+  "00_missingness": {"group": "eda", "title": "Missing values over time", "caption": "Delhi's CPCB record is nearly complete: PM2.5 is missing on 2 days. Gaps cluster in a 2017 outage for PM10, SO2 and O3. Xylene (39% missing) is not used."},
+  "01_pm25_timeseries": {"group": "eda", "title": "Delhi PM2.5, 2015 to mid-2020", "caption": "A spike starts in every 15 Oct to 30 Nov window (shaded), with peaks up to 685 µg/m³. Levels stay high into Dec and Jan, after the fires stop, so weather alone produces severe smog."},
+  "02_monthly_box": {"group": "eda", "title": "Seasonality", "caption": "Monthly medians run from 43 (Aug, monsoon) to 210 µg/m³ (Nov–Dec). The seasonal-mean baseline shows what the calendar alone explains."},
+  "03_fires_vs_pm25": {"group": "eda", "title": "Fires and PM2.5 together", "caption": "69% of Punjab and Haryana fire detections fall in 15 Oct to 30 Nov. The April–May wheat fires produce no PM2.5 spike: summer weather disperses the smoke."},
+  "04_fire_map": {"group": "eda", "title": "Where the fires are", "caption": "The bounding box captures 92% of Oct–Nov detections in the wider window. It is approximate and includes a sliver of western UP."},
+  "05_lag_correlation": {"group": "eda", "title": "Which fire lags matter?", "caption": "Within Oct–Nov, the fire to PM2.5 correlation rises from 0.27 (same day) to 0.48 (4–5 days), so 3- and 7-day rolling fire sums are used."},
+  "06_weather_vs_pm25": {"group": "eda", "title": "Weather confounders", "caption": "Calm air (wind, ρ = −0.34) and a shallow mixing layer (ρ = −0.44) trap pollution. These conditions coincide with the burning season, so the fair comparison must include weather."},
+  "07_wind_direction": {"group": "eda", "title": "Wind direction on bad days", "caption": "NW winds (from Punjab) dominate the cool season on all days. Severe days are not more often NW, so direction alone is not the mechanism."},
+  "08_corr_heatmap": {"group": "eda", "title": "Feature correlations", "caption": "Tomorrow's PM2.5 correlates 0.90 with today's. Fire features correlate 0.44–0.54, but they are confounded with temperature and season."},
+  "09_diwali": {"group": "eda", "title": "Diwali inside the burning season", "caption": "PM2.5 jumps the day after Diwali (2017: 176 → 427). A Diwali flag is in both model variants so fireworks aren't credited to fires."},
+  "R1_model_comparison": {"group": "results", "title": "Model comparison, 2019 test year", "caption": "Tree models beat persistence overall and in the burning season. The seasonal mean is far worse: yesterday's air matters more than the calendar."},
+  "R2_test_season_forecast": {"group": "results", "title": "2019 season: observed vs forecasts", "caption": "Forecasts follow reality with about a one-day lag. They gain mainly by not over-shooting after a peak collapses."},
+  "R3_bootstrap": {"group": "results", "title": "Bootstrap of the 2019 fire effect", "caption": "On 2019 alone, fires cut Random Forest error by 4.5%. The 95% CI just touches zero."},
+  "R4_error_analysis": {"group": "results", "title": "Error analysis", "caption": "Systematic shrinkage: clean days are over-predicted (+12) and Severe days under-predicted (−70). The largest bias is in Dec–Jan."},
+  "R5_permutation_importance": {"group": "results", "title": "Permutation importance", "caption": "Today's PM2.5 dominates. Individual fire features look negligible because they stand in for each other."},
+  "R6_partial_dependence": {"group": "results", "title": "Partial dependence on recent fires", "caption": "The model's response to fires is larger with NW wind (+17 vs +6 µg/m³): plausible transport, but within the noise (see R8)."},
+  "R7_ridge_coefficients": {"group": "results", "title": "Ridge coefficients", "caption": "Standardised effects on log PM2.5: persistence, season, humidity, temperature and wind come first."},
+  "R8_robustness_fire_gain": {"group": "results", "title": "Robustness: three seasons × three horizons", "caption": "Single-season fire gains swing from −19% to +8%. Pooled over 2017–19, every 95% CI includes zero, so the 2019 gain does not generalise."},
+  "R9_error_vs_horizon": {"group": "results", "title": "Error vs forecast horizon", "caption": "The models' edge over persistence grows from 7% (1 day) to 14% (3 days). The with-fires and without-fires lines coincide."}
+}

@@ -1,0 +1,133 @@
+{
+  "selected_model": "RandomForest",
+  "rule": "lowest mean validation MAE over both variants",
+  "family_val_mae": {
+    "RandomForest": 20.601,
+    "HistGB": 20.665,
+    "Ridge": 22.971
+  },
+  "severe_alert_threshold_from_val": {
+    "no_fires": 220.0,
+    "with_fires": 225.0
+  },
+  "cv": {
+    "Ridge/no_fires": {
+      "best_params": {
+        "alpha": 100
+      },
+      "cv_mae": 31.50139022908552,
+      "cv_mae_std": 3.9755933621469226
+    },
+    "Ridge/with_fires": {
+      "best_params": {
+        "alpha": 100
+      },
+      "cv_mae": 31.146967561550195,
+      "cv_mae_std": 3.8003718149327765
+    },
+    "RandomForest/no_fires": {
+      "best_params": {
+        "max_depth": 10,
+        "max_features": 0.5,
+        "min_samples_leaf": 3,
+        "n_estimators": 300
+      },
+      "cv_mae": 29.903282390809352,
+      "cv_mae_std": 3.2210011183494074
+    },
+    "RandomForest/with_fires": {
+      "best_params": {
+        "max_depth": null,
+        "max_features": 0.5,
+        "min_samples_leaf": 3,
+        "n_estimators": 300
+      },
+      "cv_mae": 30.06834746154202,
+      "cv_mae_std": 3.1456634823007597
+    },
+    "HistGB/no_fires": {
+      "best_params": {
+        "l2_regularization": 1.0,
+        "learning_rate": 0.03,
+        "max_depth": 3,
+        "max_iter": 200,
+        "min_samples_leaf": 20
+      },
+      "cv_mae": 30.92774572484571,
+      "cv_mae_std": 3.5636884212376456
+    },
+    "HistGB/with_fires": {
+      "best_params": {
+        "l2_regularization": 1.0,
+        "learning_rate": 0.03,
+        "max_depth": 3,
+        "max_iter": 500,
+        "min_samples_leaf": 20
+      },
+      "cv_mae": 30.70933786462904,
+      "cv_mae_std": 3.041601019000065
+    }
+  },
+  "features": {
+    "no_fires": [
+      "pm25_t",
+      "pm25_lag1",
+      "pm25_lag2",
+      "pm25_lag3",
+      "pm25_roll3_mean",
+      "pm25_roll7_mean",
+      "pm10_t",
+      "no2_t",
+      "co_t",
+      "wind_speed",
+      "wind_dir_sin",
+      "wind_dir_cos",
+      "nw_wind",
+      "temp",
+      "humidity",
+      "precip",
+      "blh_mean",
+      "blh_min",
+      "month_sin",
+      "month_cos",
+      "dow",
+      "is_diwali_window",
+      "is_fire_season"
+    ],
+    "with_fires": [
+      "pm25_t",
+      "pm25_lag1",
+      "pm25_lag2",
+      "pm25_lag3",
+      "pm25_roll3_mean",
+      "pm25_roll7_mean",
+      "pm10_t",
+      "no2_t",
+      "co_t",
+      "wind_speed",
+      "wind_dir_sin",
+      "wind_dir_cos",
+      "nw_wind",
+      "temp",
+      "humidity",
+      "precip",
+      "blh_mean",
+      "blh_min",
+      "month_sin",
+      "month_cos",
+      "dow",
+      "is_diwali_window",
+      "is_fire_season",
+      "fire_count_t",
+      "fire_count_lag1",
+      "fire_count_lag2",
+      "fire_count_lag3",
+      "fire_roll3_sum",
+      "fire_roll7_sum",
+      "log_fire_count_t",
+      "log_fire_roll3_sum",
+      "fire_frp_sum_t",
+      "fire_roll3_x_nw"
+    ]
+  }
+}

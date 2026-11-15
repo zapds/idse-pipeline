@@ -1,0 +1,7 @@
+pm25_level,n,MAE,bias
+Good,25,13.14,12.81
+Satisfactory,97,15.7,11.53
+Moderate,78,16.02,5.23
+Poor,58,20.46,5.86
+Very Poor,73,29.64,-4.86
+Severe,34,81.8,-70.17

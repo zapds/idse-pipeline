@@ -1,0 +1,271 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Smoke &amp; Signal — Delhi smog forecasts</title>
+<meta name="description" content="Do Punjab–Haryana farm fires help predict Delhi's smog? Model results, training details and live next-day PM2.5 forecasts.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/static/style.css">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><circle cx='16' cy='16' r='13' fill='%23c4561d'/><circle cx='16' cy='16' r='6' fill='%23f3eee4'/></svg>">
+</head>
+<body>
+<div class="haze" aria-hidden="true"></div>
+
+<header class="topbar">
+  <a class="brand" href="#top"><span class="dot"></span>Smoke <em>&amp;</em> Signal</a>
+  <nav>
+    <a href="#forecast">Forecast</a>
+    <a href="#findings">Findings</a>
+    <a href="#data">Data</a>
+    <a href="#method">Method</a>
+    <a href="#downloads">Downloads</a>
+  </nav>
+</header>
+
+<main id="top">
+  <!-- ============================================================ HERO -->
+  <section class="hero">
+    <p class="kicker">IDSE data science project · Delhi, 2015–2020</p>
+    <h1>Do Punjab–Haryana farm fires help <em>predict</em> Delhi's smog?</h1>
+    <p class="lede">Every October and November, farmers in Punjab and Haryana burn crop stubble, and Delhi's air
+      turns toxic. The fires clearly pollute. We asked a narrower, practical question: if you already know
+      today's pollution and weather in Delhi, does adding satellite counts of those fires make the forecast for
+      the <strong>next few days</strong> any more accurate? Each model was built twice, once with the fire data
+      and once without, and tested on years it had never seen.</p>
+    <div class="answer">
+      <span class="answer-label">Answer</span>
+      <p>No, not measurably. In three different years, forecasts with fire data were neither reliably better nor
+        reliably worse than forecasts without it. By the time the smoke matters, it is already showing up in
+        Delhi's own pollution readings, which the model uses anyway.</p>
+    </div>
+
+    <dl class="primer" aria-label="Key terms">
+      <div><dt>PM2.5</dt><dd>Fine particles small enough to reach the lungs, in µg/m³. India calls above 60
+        unhealthy and above 250 <b>Severe</b>.</dd></div>
+      <div><dt>Burning season</dt><dd>15 Oct – 30 Nov, when most stubble fires happen and smog peaks.</dd></div>
+      <div><dt>Forecast error</dt><dd>How far a forecast lands from the real reading, averaged over days
+        (MAE, in µg/m³). Lower is better.</dd></div>
+      <div><dt>Naive forecast</dt><dd>"Tomorrow will be the same as today." Any model worth using must beat it.
+        Also called persistence.</dd></div>
+    </dl>
+
+    <h2 class="stats-title">The results in four numbers</h2>
+    <div class="stats" id="hero-stats"></div>
+  </section>
+
+  <!-- ============================================================ FORECAST -->
+  <section id="forecast" class="block">
+    <div class="block-head">
+      <span class="num">01</span>
+      <div>
+        <h2>Live forecast</h2>
+        <p>Try the model yourself. Pick a real day from the data (the results show what actually happened next), or
+          type in your own conditions. Forecasts update as you type, using the exact code that trained the model.</p>
+      </div>
+    </div>
+
+    <div class="forecast-grid">
+      <form id="inputs" class="card inputs" autocomplete="off" onsubmit="return false">
+        <fieldset>
+          <legend>Start from a real day</legend>
+          <div class="presets" id="presets"></div>
+          <div class="row">
+            <label class="field grow">Forecast made at end of
+              <input type="date" id="date" required>
+            </label>
+            <button type="button" class="btn ghost" id="load-day">Load observed data</button>
+          </div>
+          <p class="hint" id="day-note"></p>
+        </fieldset>
+
+        <fieldset>
+          <legend>Last 7 days <span class="muted">— oldest → today</span></legend>
+          <p class="hint">Daily Delhi PM2.5, and the number of fires satellites detected in Punjab–Haryana.</p>
+          <div class="week" id="week"></div>
+        </fieldset>
+
+        <fieldset>
+          <legend>Today's other pollutants <span class="muted">— optional</span></legend>
+          <div class="fields three">
+            <label class="field">PM10 <span class="unit">µg/m³</span><input type="number" step="any" min="0" data-k="pm10"></label>
+            <label class="field">NO₂ <span class="unit">µg/m³</span><input type="number" step="any" min="0" data-k="no2"></label>
+            <label class="field">CO <span class="unit">mg/m³</span><input type="number" step="any" min="0" data-k="co"></label>
+          </div>
+        </fieldset>
+
+        <fieldset>
+          <legend>Today's weather in Delhi</legend>
+          <p class="hint">Calm, humid air and a low mixing height (the depth of air the smoke can spread into) trap pollution.</p>
+          <div class="fields three">
+            <label class="field">Temperature <span class="unit">°C</span><input type="number" step="any" data-w="temp" required></label>
+            <label class="field">Humidity <span class="unit">%</span><input type="number" step="any" min="0" max="100" data-w="humidity" required></label>
+            <label class="field">Rain <span class="unit">mm</span><input type="number" step="any" min="0" data-w="precip" required></label>
+            <label class="field">Max wind <span class="unit">km/h</span><input type="number" step="any" min="0" data-w="wind_speed" required></label>
+            <label class="field">Wind from <span class="unit">° <b id="compass"></b></span><input type="number" step="any" min="0" max="360" data-w="wind_dir" required></label>
+            <label class="field" title="Total heat output of today's detected fires (fire radiative power)">Fire heat today <span class="unit">MW, opt.</span><input type="number" step="any" min="0" data-k="fire_frp_today"></label>
+            <label class="field">Mixing height, mean <span class="unit">m</span><input type="number" step="any" min="0" data-w="blh_mean" required></label>
+            <label class="field">Mixing height, min <span class="unit">m</span><input type="number" step="any" min="0" data-w="blh_min" required></label>
+          </div>
+        </fieldset>
+        <p class="error" id="form-error" role="alert"></p>
+      </form>
+
+      <div class="outputs" aria-live="polite">
+        <div class="alert-banner" id="alert-banner" hidden></div>
+        <div class="horizons" id="horizons"></div>
+
+        <div class="card">
+          <h3>What do the fires add to this forecast?</h3>
+          <p class="sub" id="fire-delta"></p>
+          <div id="whatif" class="chart"></div>
+          <p class="note">What if there had been no fires, or four times as many? The orange line re-runs the
+            forecast with every fire count multiplied (×1 = what you entered). The blue dashed line is the model
+            built without fire data. Even where the orange line moves, testing over three years showed this
+            reaction does not make forecasts more accurate (see <a href="#findings">Findings</a>).</p>
+        </div>
+
+        <div class="card">
+          <h3>Every model, every horizon</h3>
+          <div class="table-wrap"><table id="model-table" class="data"></table></div>
+          <p class="note">Forecast PM2.5 (µg/m³) from every model we built. Random Forest, Ridge and HistGB are three
+            kinds of machine-learning model; the highlighted one was picked on 2018 data before testing. Persistence
+            ("tomorrow = today") and the seasonal mean (the usual level for that time of year) are simple yardsticks.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============================================================ FINDINGS -->
+  <section id="findings" class="block">
+    <div class="block-head">
+      <span class="num">02</span>
+      <div>
+        <h2>Findings</h2>
+        <p>We set three goals before testing. The main test used 2019, a year the models never saw. A wider check on
+          2017, 2018 and 2019 then showed that the small fire benefit seen in 2019 was luck, not a pattern.</p>
+      </div>
+    </div>
+    <div class="goals" id="goals"></div>
+
+    <h3 class="sec">2019 test year: how far off was each model?</h3>
+    <div class="card"><div class="table-wrap"><table id="test-table" class="data"></table></div>
+      <p class="note">Average error = average miss in µg/m³ (lower is better). RMSE weighs big misses more heavily.
+        R² is the share of day-to-day variation explained (1 = perfect). Burning season = 15 Oct – 30 Nov, 47 days.</p></div>
+
+    <h3 class="sec">Does it hold up? Three years, 1–3 days ahead</h3>
+    <div class="card"><div class="table-wrap"><table id="robust-table" class="data"></table></div>
+      <p class="note">Each year was forecast by models trained only on earlier years. "Fire benefit" = how much
+        adding fire data cut the burning-season error (positive = helped, negative = hurt), over all 141 days.
+        The 95% range is the plausible size of that change in µg/m³; when it spans zero, the effect could be nothing.</p></div>
+
+    <h3 class="sec">Figures</h3>
+    <div class="gallery" id="gallery-results"></div>
+  </section>
+
+  <!-- ============================================================ DATA -->
+  <section id="data" class="block">
+    <div class="block-head">
+      <span class="num">03</span>
+      <div>
+        <h2>Data &amp; exploration</h2>
+        <p>Three free public sources: Delhi's official pollution readings, NASA's satellite fire detections, and
+          historical weather.</p>
+      </div>
+    </div>
+    <div class="card"><div class="table-wrap"><table class="data">
+      <thead><tr><th>Source</th><th>What</th><th>Role</th></tr></thead>
+      <tbody>
+        <tr><td><b>CPCB</b> via Kaggle <code>city_day.csv</code></td><td>Daily Delhi pollutants, Jan 2015 – Jul 2020</td><td>What we predict, and today's readings</td></tr>
+        <tr><td><b>NASA FIRMS</b> MODIS C6.1</td><td>Satellite fire detections over India</td><td>The fire data being tested</td></tr>
+        <tr><td><b>Open-Meteo</b> ERA5 archive</td><td>Delhi weather &amp; boundary-layer height</td><td>Weather, which also drives smog</td></tr>
+      </tbody></table></div>
+      <div class="clean-stats" id="clean-stats"></div>
+    </div>
+    <h3 class="sec">Exploratory figures</h3>
+    <div class="gallery" id="gallery-eda"></div>
+  </section>
+
+  <!-- ============================================================ METHOD -->
+  <section id="method" class="block">
+    <div class="block-head">
+      <span class="num">04</span>
+      <div>
+        <h2>How the models were trained</h2>
+        <p>The whole pipeline, from download to this website's models, reruns with one command,
+          <code>./run_all.sh</code>, and gives the same numbers every time.</p>
+      </div>
+    </div>
+
+    <ol class="pipeline">
+      <li><b>Download</b><span>FIRMS yearly files, Open-Meteo JSON, Kaggle CSV</span></li>
+      <li><b>Clean</b><span>Duplicates, impossible values, UTC→IST, region filter; target never imputed</span></li>
+      <li><b>Features</b><span>Past-only lags &amp; rolling windows; forward-fill only</span></li>
+      <li><b>Leakage tests</b><span>Automated checks that no input secretly uses future data</span></li>
+      <li><b>Tune</b><span>Try settings on 2015–17, always validating on later months (GridSearchCV, TimeSeriesSplit)</span></li>
+      <li><b>Select</b><span>Pick the model with the lowest error on 2018</span></li>
+      <li><b>Test once</b><span>Retrain on 2015–18, score 2019 a single time</span></li>
+      <li><b>Robustness</b><span>Repeat for 2017, 2018 and 2019, at 1–3 days ahead</span></li>
+    </ol>
+
+    <h3 class="sec">Split by time, never at random</h3>
+    <div class="timeline" aria-label="Train 2015 to 2017, validation 2018, test 2019, extra 2020 first half">
+      <div class="seg train" style="flex:3"><b>Train</b><span>2015 · 2016 · 2017</span></div>
+      <div class="seg val"><b>Validate</b><span>2018</span></div>
+      <div class="seg test"><b>Test</b><span>2019</span></div>
+      <div class="seg extra" style="flex:.5"><b>Stress</b><span>2020 H1</span></div>
+    </div>
+    <p class="note">Neighbouring days are nearly identical, so a random split would leak tomorrow into training.
+      Rows are assigned by the date being predicted.</p>
+
+    <div class="two">
+      <div class="card">
+        <h3>Features</h3>
+        <dl class="feat" id="features"></dl>
+        <p class="note">The inputs each model sees. "Fires" are the only difference between the two versions of each
+          model. Weather is today's measured weather, not tomorrow's, so the model never relies on a perfect weather
+          forecast. Calendar inputs describe the day being forecast, which is known in advance.</p>
+      </div>
+      <div class="card">
+        <h3>Tuned hyperparameters</h3>
+        <div class="table-wrap"><table id="cv-table" class="data"></table></div>
+        <p class="note" id="selection-note"></p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============================================================ DOWNLOADS -->
+  <section id="downloads" class="block">
+    <div class="block-head">
+      <span class="num">05</span>
+      <div><h2>Report &amp; notebooks</h2><p>The full write-up, including limitations and viva notes.</p></div>
+    </div>
+    <div class="downloads">
+      <a class="dl" href="/download/report.pdf" target="_blank" rel="noopener"><b>Report</b><span>PDF · 11 pages</span></a>
+      <a class="dl" href="/download/report.md"><b>Report source</b><span>Markdown</span></a>
+      <a class="dl" href="/download/01_eda.ipynb"><b>EDA notebook</b><span>Jupyter · executed</span></a>
+      <a class="dl" href="/download/02_results.ipynb"><b>Results notebook</b><span>Jupyter · executed</span></a>
+    </div>
+    <div class="card limits">
+      <h3>Limitations to keep in mind</h3>
+      <ul>
+        <li><b>Predictive, not causal.</b> "No forecasting skill" does not mean fires don't pollute Delhi; it means their effect is already in today's measurements.</li>
+        <li><b>Satellites miss fires</b> at night, under smoke and cloud, and when small. MODIS passes around 10:30 and 13:30.</li>
+        <li><b>Only three test seasons</b> and data ending in 2020; one city-average series and one weather grid point.</li>
+        <li><b>Post-hoc steps</b> (alert threshold, robustness check) are labelled as such and reported alongside the primary result.</li>
+      </ul>
+    </div>
+  </section>
+</main>
+
+<footer class="foot">
+  <span>Smoke &amp; Signal · data: CPCB, NASA FIRMS, Open-Meteo (ERA5)</span>
+  <span>For teaching and evaluation, not an operational air-quality forecast.</span>
+</footer>
+
+<dialog id="lightbox"><button class="close" aria-label="Close">×</button><img alt=""><p></p></dialog>
+<script src="/static/app.js"></script>
+</body>
+</html>
